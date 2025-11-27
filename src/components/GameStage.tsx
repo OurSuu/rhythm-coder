@@ -70,11 +70,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const currentSpeedRef = useRef(0.2); 
   const lastFrameTimeRef = useRef<number>(0);
   const spawnDelayRef = useRef<number>(0); 
+  const isEndingRef = useRef(false); // เช็คว่ากำลังจบเพลงไหม
 
-  const START_SPEED = 0.2; 
-  const WINDOW_PERFECT = 5; 
-  const WINDOW_GOOD = 12; 
-  const WINDOW_BAD = 18; // *** ตัวแปรเจ้าปัญหา ถูกเรียกใช้แล้วใน handleInputStart ***
+  const WINDOW_PERFECT = 6; 
+  const WINDOW_GOOD = 14; 
+  const WINDOW_BAD = 20;
 
   // --- SETTINGS ---
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,6 +122,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       playSfx('MISS');
   };
 
+  const finishGame = () => {
+      setGameState('RESULTS');
+      isPlayingRef.current = false;
+  };
+
   // --- CORE GAME LOGIC ---
   const startCountdown = () => {
     setGameState('COUNTDOWN');
@@ -139,6 +144,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     
     lastFrameTimeRef.current = performance.now();
     lastBeatTimeRef.current = Date.now();
+    isEndingRef.current = false;
 
     try {
       controllerRef.current.resume();
@@ -159,7 +165,10 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const startNewGame = () => {
     notesRef.current = []; setScore(0); setCombo(0); setHealth(MAX_HP);
     spawnDelayRef.current = 0; 
-    currentSpeedRef.current = START_SPEED;
+    
+    // ตั้งค่า Speed ให้เร็วขึ้นหน่อยเพื่อให้โน้ตวิ่งทันเสียงเพลง
+    currentSpeedRef.current = song.difficulty === 'HARD' ? 0.6 : 0.4;
+
     if(audioRef.current) { controllerRef.current.setup(audioRef.current); audioRef.current.currentTime = 0; audioRef.current.volume = volume; }
     startCountdown();
   };
@@ -173,13 +182,19 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     lastFrameTimeRef.current = now;
     const dtFactor = Math.min(deltaTime, 100) / 16.667; 
 
-    // Audio Sync
+    // Audio Sync & Ending Check
     if (audioRef.current) {
         setCurrentTime(audioRef.current.currentTime);
-        if (audioRef.current.ended && notesRef.current.length === 0) {
-             setGameState('RESULTS');
-             isPlayingRef.current = false;
-             return;
+        
+        // ถ้าเพลงจบ
+        if (audioRef.current.ended) {
+            isEndingRef.current = true;
+            
+            // เช็คว่าโน้ตหมดจอหรือยัง
+            if (notesRef.current.length === 0) {
+                finishGame();
+                return; // หยุด Loop
+            }
         }
     }
 
@@ -188,17 +203,22 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
     // DYNAMIC SPEED
     const IS_HARD = song.difficulty === 'HARD';
-    const baseSpeed = IS_HARD ? 0.4 : 0.25;
+    // เพิ่ม Base Speed ขึ้น เพื่อลด Latency (โน้ตมาเร็ว = กดตรงจังหวะง่ายขึ้นในเกมแนวนี้)
+    const baseSpeed = IS_HARD ? 0.6 : 0.4; 
     const speedMultiplier = IS_HARD ? 1.0 : 0.5;
     const targetSpeed = baseSpeed + ((analysis.bass / 255) * speedMultiplier);
+    
+    // ปรับความเร็วอย่างนุ่มนวล
     currentSpeedRef.current += (targetSpeed - currentSpeedRef.current) * 0.05 * dtFactor;
 
     // === SPAWN LOGIC ===
     const timeNow = Date.now();
-    
-    if (timeNow < spawnDelayRef.current) {
-        // Skip
-    } else {
+    const timeLeft = duration - (audioRef.current?.currentTime || 0);
+
+    // หยุดสร้างโน้ตถ้าเพลงใกล้จบ (2 วินาทีสุดท้าย) หรือเพลงจบแล้ว
+    const shouldStopSpawning = timeLeft < 2 || isEndingRef.current;
+
+    if (!shouldStopSpawning && timeNow >= spawnDelayRef.current) {
         const timeSinceLastNote = timeNow - lastBeatTimeRef.current;
         const spawnThreshold = IS_HARD ? 130 : 160; 
         const minNoteGap = (60000 / song.bpm / (analysis.bass > 200 ? 2 : 1));
@@ -211,7 +231,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 let type: NoteType = 'NORMAL';
                 let length = 0;
 
-                if (IS_HARD && rand > 0.8) {
+                if (IS_HARD && rand > 0.85) {
                     type = 'HOLD';
                     length = 30 + Math.random() * 40; 
                     spawnDelayRef.current = timeNow + (length * 15); 
@@ -255,6 +275,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
             nextY += (currentSpeedRef.current * dtFactor);
         }
 
+        // Miss Check
         if (nextY > 110 && !note.hit && !note.missed) {
             note.missed = true;
             setCombo(0);
@@ -279,7 +300,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
       if (!isPlayingRef.current) return;
 
-      // *** FIX: ใช้ WINDOW_BAD ในการค้นหา เพื่อให้กดติดง่ายขึ้น ***
       const hitNote = notesRef.current.find(n => n.lane === lane && !n.hit && !n.missed && Math.abs(n.y - HIT_ZONE_Y) < WINDOW_BAD);
 
       if (hitNote) {
@@ -295,7 +315,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                   triggerHitEffect(lane as 0|1|2|3, 'GOOD'); playSfx('HIT');
                   showJudgement('GOOD'); updateHealth(1);
               } else {
-                  // BAD CASE (กดติดแต่คะแนนน้อย)
                   setScore(s => s + 50); setCombo(0);
                   triggerHitEffect(lane as 0|1|2|3, 'BAD'); playSfx('MISS');
                   showJudgement('BAD'); updateHealth(-5);
@@ -334,7 +353,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         window.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gameState]); // Re-bind when gamestate changes
+  }, [gameState]);
 
   return (
     <div className="relative w-full h-screen bg-dark-bg overflow-hidden font-mono select-none outline-none">
@@ -422,7 +441,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         </div>
       </div>
 
-      {/* --- TOUCH ZONES (SWIPE) --- */}
+      {/* --- TOUCH ZONES (SWIPE SUPPORT) --- */}
       <div className="absolute inset-0 z-40 flex md:hidden">
           {[0, 1, 2, 3].map((lane) => (
               <div 
@@ -447,15 +466,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       <div className="absolute top-[15%] left-1/2 -translate-x-1/2 z-10 pointer-events-none transform scale-90">
         <CyberCharacter intensity={audioIntensity} />
       </div>
-
-      {/* Judgement Overlay */}
-      {lastJudgement && gameState === 'PLAYING' && (
-          <div key={lastJudgement.id} className="absolute top-[40%] left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-              <div className={`text-6xl font-black italic transform -skew-x-12 animate-bounce ${lastJudgement.color} drop-shadow-[0_0_30px_currentColor]`}>
-                  {lastJudgement.text}
-              </div>
-          </div>
-      )}
 
       {/* Overlays */}
       {gameState === 'IDLE' && (
@@ -509,6 +519,15 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         <div className="absolute inset-0 z-50 flex justify-center items-center">
            <div className="text-[150px] font-black text-white">{countdown}</div>
         </div>
+      )}
+      
+      {/* Judgement Overlay */}
+      {lastJudgement && gameState === 'PLAYING' && (
+          <div key={lastJudgement.id} className="absolute top-[40%] left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+              <div className={`text-6xl font-black italic transform -skew-x-12 animate-bounce ${lastJudgement.color} drop-shadow-[0_0_30px_currentColor]`}>
+                  {lastJudgement.text}
+              </div>
+          </div>
       )}
 
       <audio 
