@@ -72,7 +72,9 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const spawnDelayRef = useRef<number>(0); 
 
   const START_SPEED = 0.2; 
-  const WINDOW_PERFECT = 5; const WINDOW_GOOD = 12; const WINDOW_BAD = 18;
+  const WINDOW_PERFECT = 5; 
+  const WINDOW_GOOD = 12; 
+  const WINDOW_BAD = 18; // *** ตัวแปรเจ้าปัญหา ถูกเรียกใช้แล้วใน handleInputStart ***
 
   // --- SETTINGS ---
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,7 +147,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     } catch (e) { console.error(e); }
   };
 
-  // ** DEFINED HERE TO BE ACCESSIBLE EVERYWHERE **
   const togglePause = () => {
       if (isPlayingRef.current) {
           setGameState('PAUSED'); isPlayingRef.current = false;
@@ -196,7 +197,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     const timeNow = Date.now();
     
     if (timeNow < spawnDelayRef.current) {
-        // Skip spawn if delayed
+        // Skip
     } else {
         const timeSinceLastNote = timeNow - lastBeatTimeRef.current;
         const spawnThreshold = IS_HARD ? 130 : 160; 
@@ -258,7 +259,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
             note.missed = true;
             setCombo(0);
             showJudgement('MISS');
-            updateHealth(-HP_PENALTY_MISS); // *** ใช้งาน HP_PENALTY_MISS ตรงนี้ ***
+            updateHealth(-HP_PENALTY_MISS);
             playSfx('MISS');
         }
 
@@ -278,7 +279,8 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
       if (!isPlayingRef.current) return;
 
-      const hitNote = notesRef.current.find(n => n.lane === lane && !n.hit && !n.missed && Math.abs(n.y - HIT_ZONE_Y) < WINDOW_GOOD);
+      // *** FIX: ใช้ WINDOW_BAD ในการค้นหา เพื่อให้กดติดง่ายขึ้น ***
+      const hitNote = notesRef.current.find(n => n.lane === lane && !n.hit && !n.missed && Math.abs(n.y - HIT_ZONE_Y) < WINDOW_BAD);
 
       if (hitNote) {
           if (hitNote.type === 'NORMAL') {
@@ -288,10 +290,15 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                   setScore(s => s + 500); setCombo(c => c + 1);
                   triggerHitEffect(lane as 0|1|2|3, 'PERFECT'); playSfx('HIT');
                   showJudgement('PERFECT'); updateHealth(HP_RECOVER_PERFECT);
-              } else {
+              } else if (distance <= WINDOW_GOOD) {
                   setScore(s => s + 200); setCombo(c => c + 1);
                   triggerHitEffect(lane as 0|1|2|3, 'GOOD'); playSfx('HIT');
                   showJudgement('GOOD'); updateHealth(1);
+              } else {
+                  // BAD CASE (กดติดแต่คะแนนน้อย)
+                  setScore(s => s + 50); setCombo(0);
+                  triggerHitEffect(lane as 0|1|2|3, 'BAD'); playSfx('MISS');
+                  showJudgement('BAD'); updateHealth(-5);
               }
           } 
           else if (hitNote.type === 'HOLD') {
@@ -327,7 +334,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         window.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gameState]); // Re-bind when gamestate changes to ensure togglePause is fresh
+  }, [gameState]); // Re-bind when gamestate changes
 
   return (
     <div className="relative w-full h-screen bg-dark-bg overflow-hidden font-mono select-none outline-none">
@@ -441,7 +448,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         <CyberCharacter intensity={audioIntensity} />
       </div>
 
-      {/* Judgement */}
+      {/* Judgement Overlay */}
       {lastJudgement && gameState === 'PLAYING' && (
           <div key={lastJudgement.id} className="absolute top-[40%] left-1/2 -translate-x-1/2 z-50 pointer-events-none">
               <div className={`text-6xl font-black italic transform -skew-x-12 animate-bounce ${lastJudgement.color} drop-shadow-[0_0_30px_currentColor]`}>
