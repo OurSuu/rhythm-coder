@@ -12,11 +12,11 @@ interface Note {
   lane: 0 | 1 | 2 | 3;
   y: number;
   type: NoteType;
-  length: number;       // ความยาวสำหรับ Hold Note
-  requiredHits: number; // จำนวนครั้งที่ต้องกดสำหรับ Rapid Note
-  currentHits: number;  // จำนวนที่กดไปแล้ว
-  isHolding: boolean;   // กำลังกดค้างอยู่ไหม
-  hit: boolean;         // โดนกดหรือยัง (สำหรับ Normal)
+  length: number;
+  requiredHits: number;
+  currentHits: number;
+  isHolding: boolean;
+  hit: boolean;
   missed: boolean;
 }
 
@@ -39,13 +39,6 @@ const MAX_HP = 100;
 const HP_PENALTY_MISS = 10; 
 const HP_RECOVER_PERFECT = 2; 
 
-function formatTime(sec: number) {
-  if (isNaN(sec)) return "00:00";
-  const min = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${min.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
 export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   // State
   const [score, setScore] = useState(0);
@@ -54,28 +47,26 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [audioIntensity, setAudioIntensity] = useState(0);
   const [gameState, setGameState] = useState<'IDLE' | 'COUNTDOWN' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'RESULTS'>('IDLE');
   const [countdown, setCountdown] = useState(3);
-  const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
+  const [, setLastJudgement] = useState<Judgement | null>(null); // intentionally ignore value
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [, setCurrentTime] = useState(0); // intentionally ignore value
+  const [, setDuration] = useState(0); // intentionally ignore value
 
   // Refs
   const isPlayingRef = useRef(false);
-  const notesRef = useRef<Note[]>([]); 
-  const heldLanesRef = useRef<boolean[]>([false, false, false, false]); // เก็บสถานะปุ่มที่ถูกกดค้างไว้
+  const notesRef = useRef<Note[]>([]);
+  const heldLanesRef = useRef<boolean[]>([false, false, false, false]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const controllerRef = useRef<AudioController>(new AudioController());
-  
+
   const lastBeatTimeRef = useRef<number>(0);
-  const currentSpeedRef = useRef(0.2); 
+  const currentSpeedRef = useRef(0.2);
   const lastFrameTimeRef = useRef<number>(0);
 
-  const START_SPEED = 0.2; 
   const WINDOW_GOOD = 15; // Hit window
 
   // --- AUDIO SFX ---
   const playSfx = (type: 'HIT' | 'MISS' | 'HOLD') => {
-      // ลดเสียง Spam หน่อยถ้าเป็น Hold
       if (type === 'HOLD' && Math.random() > 0.3) return; 
       const sfxUrl = type === 'HIT' || type === 'HOLD' ? '/audio/hit.mp3' : '/audio/miss.mp3';
       const audio = new Audio(sfxUrl);
@@ -138,13 +129,12 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
             let length = 0;
             let requiredHits = 0;
 
-            // สุ่มประเภทโน้ต
             if (rand > 0.85) {
                 type = 'HOLD';
-                length = 30 + Math.random() * 50; // ความยาวสุ่ม
+                length = 30 + Math.random() * 50;
             } else if (rand > 0.75 && song.difficulty === 'HARD') {
                 type = 'RAPID';
-                requiredHits = 5; // ต้องกด 5 ที
+                requiredHits = 5;
             }
 
             notesRef.current.push({
@@ -160,38 +150,28 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     notesRef.current = notesRef.current.map(note => {
         let nextY = note.y;
 
-        // 1. RAPID NOTE LOGIC: หยุดรอที่เส้น
         if (note.type === 'RAPID' && !note.hit && !note.missed) {
             if (note.y < HIT_ZONE_Y) {
                 nextY += (currentSpeedRef.current * dtFactor);
             } else {
-                // หยุดที่เส้น รอให้กดครบ
                 nextY = HIT_ZONE_Y;
-                // ถ้าอยู่นานเกินไป (เช่น 2 วิ) ให้ถือว่า Miss
-                // (ในโค้ดจริงควรจับเวลา แต่ขอละไว้เพื่อความง่าย)
             }
         } 
-        // 2. HOLD NOTE LOGIC:
         else if (note.type === 'HOLD') {
             if (note.isHolding) {
-                // ถ้ากดค้างอยู่ ให้ลดความยาวลงเรื่อยๆ (เหมือนกินโน้ต)
-                // หรือขยับ y ลง แต่ตรึงหัวไว้ที่เส้น (Visual Trick)
                 if (heldLanesRef.current[note.lane]) {
-                    // กำลังกดอยู่: ได้คะแนนเรื่อยๆ
                     setScore(s => s + 10);
-                    playSfx('HOLD'); // เสียงรัวๆ
+                    playSfx('HOLD');
                     
-                    // ลดความยาว (Visual)
                     note.length -= (currentSpeedRef.current * dtFactor);
-                    nextY = HIT_ZONE_Y; // ตรึงหัวไว้ที่เส้น
+                    nextY = HIT_ZONE_Y;
 
                     if (note.length <= 0) {
-                        note.hit = true; // หมดแล้ว = ชนะ
+                        note.hit = true;
                         triggerHitEffect(note.lane, 'PERFECT');
                         showJudgement('PERFECT');
                     }
                 } else {
-                    // ปล่อยมือกลางคัน = MISS
                     note.missed = true;
                     note.isHolding = false;
                     setCombo(0); showJudgement('MISS');
@@ -200,12 +180,10 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 nextY += (currentSpeedRef.current * dtFactor);
             }
         }
-        // 3. NORMAL NOTE
         else {
             nextY += (currentSpeedRef.current * dtFactor);
         }
 
-        // Check Miss (หลุดจอ)
         if (nextY > 110 && !note.hit && !note.missed) {
             note.missed = true;
             setCombo(0);
@@ -215,7 +193,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         }
 
         return { ...note, y: nextY };
-    }).filter(note => note.y < 120 && !note.hit && !note.missed); // ลบเมื่อจบ
+    }).filter(note => note.y < 120 && !note.hit && !note.missed);
 
     requestAnimationFrame(gameLoop);
   };
@@ -224,16 +202,13 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const handleInputStart = (lane: number) => {
       if (lane < 0 || lane > 3) return;
       
-      // Update Held Status
       heldLanesRef.current[lane] = true; 
 
-      // Visual
       const laneEl = document.getElementById(`lane-${lane}`);
       laneEl?.classList.add('bg-white/20');
 
       if (!isPlayingRef.current) return;
 
-      // Find Target Note
       const hitNote = notesRef.current.find(n => n.lane === lane && !n.hit && !n.missed && Math.abs(n.y - HIT_ZONE_Y) < WINDOW_GOOD);
 
       if (hitNote) {
@@ -257,7 +232,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
               }
           }
           else if (hitNote.type === 'HOLD') {
-              hitNote.isHolding = true; // เริ่มเข้าโหมด Hold
+              hitNote.isHolding = true;
               playSfx('HIT');
           }
       }
@@ -265,7 +240,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
   const handleInputEnd = (lane: number) => {
       if (lane < 0 || lane > 3) return;
-      heldLanesRef.current[lane] = false; // ปล่อยปุ่ม
+      heldLanesRef.current[lane] = false;
 
       const laneEl = document.getElementById(`lane-${lane}`);
       laneEl?.classList.remove('bg-white/20');
@@ -292,7 +267,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
   // --- CONTROLS ---
   const startNewGame = () => {
-    // Reset Logic...
     notesRef.current = []; setScore(0); setCombo(0); setHealth(MAX_HP);
     if(audioRef.current) { controllerRef.current.setup(audioRef.current); audioRef.current.currentTime = 0; }
     setGameState('COUNTDOWN');
@@ -351,7 +325,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
             {notesRef.current.map((note) => {
                 if (note.hit || note.missed) return null;
 
-                // --- 1. NORMAL NOTE ---
                 if (note.type === 'NORMAL') {
                     return (
                         <div key={note.id} className={`absolute w-[20%] h-12 rounded-sm z-30 ${LANE_COLORS[note.lane]}`}
@@ -360,7 +333,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                         </div>
                     );
                 }
-                // --- 2. HOLD NOTE (LONG BAR) ---
                 else if (note.type === 'HOLD') {
                     return (
                         <div key={note.id} className={`absolute w-[20%] z-20 bg-white/20 border-x-2 border-white/50 backdrop-blur-sm`}
@@ -377,7 +349,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                         </div>
                     );
                 }
-                // --- 3. RAPID NOTE (CIRCLE) ---
                 else if (note.type === 'RAPID') {
                     return (
                         <div key={note.id} className="absolute w-[20%] aspect-square z-40 flex justify-center items-center"
@@ -400,15 +371,12 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 className="flex-1 h-full active:bg-white/5"
                 onTouchStart={(e) => { e.preventDefault(); handleInputStart(lane); }}
                 onTouchEnd={(e) => { e.preventDefault(); handleInputEnd(lane); }}
-                // เพิ่ม onTouchMove เพื่อรองรับการลากนิ้วข้ามเลน (Swipe)
                 onTouchMove={(e) => {
                     e.preventDefault();
                     const touch = e.touches[0];
                     const width = window.innerWidth / 4;
                     const targetLane = Math.floor(touch.clientX / width);
-                    // ถ้าลากไปเลนใหม่ ให้ trigger เลนนั้น
                     if (targetLane !== lane && targetLane >= 0 && targetLane <= 3) {
-                       // Logic นี้อาจต้องปรับจูนให้ไม่ spam input รัวเกินไป
                        handleInputStart(targetLane);
                     }
                 }}
