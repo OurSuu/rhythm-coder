@@ -1,0 +1,128 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #050510;
+  color: white;
+  margin: 0;
+  overflow: hidden;
+  font-family: 'Courier New', Courier, monospace;
+  
+  /* ป้องกันการ Zoom และการเลือก Text บนมือถือ */
+  touch-action: manipulation; 
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* --- 1. CRT SCREEN EFFECTS --- */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0.2)
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.scanline-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 0.5;
+  animation: scanline 6s linear infinite;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* --- 2. NOISE TEXTURE --- */
+.noise-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 998;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* --- 3. GLITCH & RGB SHIFT --- */
+@keyframes rgb-shift {
+  0% { text-shadow: -2px 0 #ff00c1, 2px 0 #00fff9; }
+  25% { text-shadow: -2px -2px #ff00c1, 2px 2px #00fff9; }
+  50% { text-shadow: 2px -2px #ff00c1, -2px 2px #00fff9; }
+  75% { text-shadow: 2px 0 #ff00c1, -2px 0 #00fff9; }
+  100% { text-shadow: -2px 0 #ff00c1, 2px 0 #00fff9; }
+}
+
+.text-rgb {
+    animation: rgb-shift 0.5s infinite;
+}
+
+/* --- 4. FLOATING PARTICLES --- */
+@keyframes float-up {
+    0% { transform: translateY(100vh) scale(0); opacity: 0; }
+    50% { opacity: 1; }
+    100% { transform: translateY(-100px) scale(1); opacity: 0; }
+}
+
+.particle {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: float-up linear infinite;
+}
+
+/* --- 5. AUDIO BARS ANIMATION --- */
+@keyframes bounce-bar {
+    0%, 100% { height: 10%; }
+    50% { height: 100%; }
+}
+.audio-bar {
+    animation: bounce-bar 0.5s ease-in-out infinite alternate;
+}
+
+/* --- TRANSITION SHUTTER --- */
+.shutter-panel {
+  transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1);
+}
+
+.shutter-text {
+  animation: blink 0.5s infinite;
+}
+
+@keyframes load-bar {
+  0% { width: 0%; }
+  20% { width: 10%; }
+  40% { width: 60%; }
+  100% { width: 100%; }
+}
+
+.animate-loader {
+  animation: load-bar 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
