@@ -46,7 +46,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  // REMOVE: const [duration, setDuration] = useState(0);
   const [volume] = useState(0.5);
 
   // --- REFS ---
@@ -60,7 +60,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const notesRef = useRef<Note[]>([]); 
   const lastBeatTimeRef = useRef<number>(0);
   const currentSpeedRef = useRef(0.2);
-  const targetSpeedRef = useRef(0); 
+  // REMOVE: const targetSpeedRef = useRef(0); 
   
   // *** NEW: เพิ่ม Ref เก็บเวลาเฟรมล่าสุด เพื่อคำนวณ Delta Time ***
   const lastFrameTimeRef = useRef<number>(0);
@@ -275,6 +275,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState]);
 
+  // Remove duration from formatTime rendering
   return (
     <div className="relative w-full h-screen bg-dark-bg overflow-hidden font-mono select-none outline-none" tabIndex={0}>
       
@@ -299,7 +300,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 </div>
                 <div className="flex justify-between w-full text-[10px] text-gray-500">
                     <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
                 </div>
             </div>
             <div className="text-right w-full md:w-auto pointer-events-auto">
