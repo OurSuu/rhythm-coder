@@ -6,14 +6,13 @@ export class AudioController {
     source: MediaElementAudioSourceNode | null = null;
     dataArray: Uint8Array | null = null;
 
-    // เริ่มต้นระบบเสียง (ต้องเรียกหลังจาก User กดปุ่ม Start เท่านั้น Browser ถึงยอมให้รัน)
+    // เริ่มต้นระบบเสียง
     setup(audioElement: HTMLAudioElement) {
-        if (this.audioContext) return; // ป้องกันการสร้างซ้ำ
+        if (this.audioContext) return;
 
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         this.analyser = this.audioContext.createAnalyser();
 
-        // fftSize = ความละเอียดในการจับเสียง (256 ได้ข้อมูล 128 ช่อง)
         this.analyser.fftSize = 256;
 
         this.source = this.audioContext.createMediaElementSource(audioElement);
@@ -26,25 +25,25 @@ export class AudioController {
 
     // ดึงค่าความดังของเสียงในขณะนั้น
     getAnalysis() {
-        // 1. สร้างตัวแปร Local มารับค่า (TypeScript จะยอมรับการเช็คค่าแบบนี้)
-        const analyser: AnalyserNode | null = this.analyser;
-        const dataArray: Uint8Array | null = this.dataArray;
+        const analyser = this.analyser;
+        const dataArray = this.dataArray;
 
-        // 2. เช็คที่ตัวแปร Local แทน
         if (!analyser || !dataArray) return { bass: 0, mid: 0, high: 0 };
 
-        analyser.getByteFrequencyData(dataArray as Uint8Array);
+        // *** FIX FOR VERCEL ERROR ***
+        // ใส่ 'as any' เพื่อแก้ error TS2345: Argument of type 'Uint8Array<ArrayBufferLike>'...
+        analyser.getByteFrequencyData(dataArray as any);
 
-        // คำนวณค่าเฉลี่ย
-        const bass = this.average(Array.from(dataArray).slice(0, 10));
-        const mid = this.average(Array.from(dataArray).slice(10, 50));
-        const high = this.average(Array.from(dataArray).slice(50, 100));
+        // คำนวณค่าเฉลี่ย (ปรับโค้ดให้สั้นลงและ type safe ขึ้น)
+        const bass = this.average(dataArray.slice(0, 10));
+        const mid = this.average(dataArray.slice(10, 50));
+        const high = this.average(dataArray.slice(50, 100));
 
         return { bass, mid, high };
     }
 
     // ฟังก์ชันช่วยหาค่าเฉลี่ย
-    private average(arr: ArrayLike<number>) {
+    private average(arr: Uint8Array | ArrayLike<number>) {
         if (arr.length === 0) return 0;
         let sum = 0;
         for (let i = 0; i < arr.length; i++) {
