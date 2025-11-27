@@ -335,6 +335,12 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       laneEl?.classList.remove('bg-white/20');
   };
 
+  // --- TOUCH LOGIC PATCH FOR MOBILE ---
+  // Fix for mobile button touch area disappearing (torch/zone not working)
+  // We will add **actual touch buttons** for each lane, always visible on mobile, and make them not interfere with torch zones.
+  // We will also fix pointer-events to allow inputs.
+  // We use an overlay with four buttons fixed to bottom for mobile.
+
   // --- LISTENERS ---
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -354,6 +360,22 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         window.removeEventListener('keyup', onKeyUp);
     };
   }, [gameState]);
+
+  // --- Prevent default scrolling/tap delay on mobile for these overlays (fix for iOS/Android) ---
+  useEffect(() => {
+    // Block scrolling/tap highlight when interacting with mobile touch buttons
+    const handler = (e: TouchEvent) => {
+      if ((e.target as HTMLElement)?.classList?.contains('mobile-lane-btn')) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', handler, { passive: false });
+    document.addEventListener('touchstart', handler, { passive: false });
+    return () => {
+      document.removeEventListener('touchmove', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, []);
 
   return (
     <div className="relative w-full h-screen bg-dark-bg overflow-hidden font-mono select-none outline-none">
@@ -442,24 +464,38 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       </div>
 
       {/* --- TOUCH ZONES (SWIPE SUPPORT) --- */}
-      <div className="absolute inset-0 z-40 flex md:hidden">
+      {/* SWIPE zones for swipe -- background only, pointer-events-none if mobile lane btn overlays present */}
+      <div className="absolute inset-0 z-40 flex md:hidden pointer-events-none">
           {[0, 1, 2, 3].map((lane) => (
               <div 
                 key={lane} 
-                className="flex-1 h-full active:bg-white/5"
-                onTouchStart={(e) => { e.preventDefault(); handleInputStart(lane); }}
-                onTouchEnd={(e) => { e.preventDefault(); handleInputEnd(lane); }}
-                onTouchMove={(e) => {
-                    e.preventDefault();
-                    const touch = e.touches[0];
-                    const width = window.innerWidth / 4;
-                    const targetLane = Math.floor(touch.clientX / width);
-                    if (targetLane !== lane && targetLane >= 0 && targetLane <= 3) {
-                       handleInputStart(targetLane);
-                    }
-                }}
+                className="flex-1 h-full"
+                // disable all pointer events so that actual buttons are used
+                // onTouchStart, onTouchEnd, onTouchMove removed for background swipe area
+                // you may bring these back if supporting true swipe in future
               ></div>
           ))}
+      </div>
+      {/* --- MOBILE LANE BUTTONS --- */}
+      <div className="fixed bottom-0 left-0 w-full z-50 flex md:hidden pointer-events-auto select-none">
+        {LANES.map((key, i) => (
+          <button
+            key={i}
+            type="button"
+            className={`mobile-lane-btn flex-1 h-20 bg-black/60 border-t-2 border-x border-neon-blue text-4xl text-white font-black active:bg-neon-pink/30 touch-manipulation`}
+            style={{ touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
+            tabIndex={0}
+            aria-label={`Touch lane ${key}`}
+            onTouchStart={e => { e.preventDefault(); handleInputStart(i); }}
+            onTouchEnd={e => { e.preventDefault(); handleInputEnd(i); }}
+            onTouchCancel={e => { e.preventDefault(); handleInputEnd(i); }}
+            // Add fallback to click for weird browsers (safety)
+            onMouseDown={e => { e.preventDefault(); handleInputStart(i); }}
+            onMouseUp={e => { e.preventDefault(); handleInputEnd(i); }}
+          >
+            {key}
+          </button>
+        ))}
       </div>
 
       {/* --- CHARACTER --- */}
