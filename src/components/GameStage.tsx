@@ -46,7 +46,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, /* setDuration */] = useState(0); // remove setDuration as per TS6133
   const [volume] = useState(0.5);
 
   // --- REFS ---
@@ -60,7 +60,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const notesRef = useRef<Note[]>([]); 
   const lastBeatTimeRef = useRef<number>(0);
   const currentSpeedRef = useRef(0.2); // *** เริ่มต้นช้าๆ เลย ***
-  const targetSpeedRef = useRef(0); 
+  // const targetSpeedRef = useRef(0);  // Removed as per TS6133, never used
 
   const START_SPEED = 0.2; // *** ปรับ Start Speed ให้ต่ำลง ***
   const WINDOW_PERFECT = 5; const WINDOW_GOOD = 12; const WINDOW_BAD = 18;

@@ -17,11 +17,6 @@ interface Props {
   bgmRef: React.RefObject<HTMLAudioElement>;
 }
 
-const BGM_PLAYLIST = [
-  '/audio/menu-bgm1.mp3',
-  '/audio/menu-bgm2.mp3',
-];
-
 export const SongMenu: React.FC<Props> = ({ songs, onSelect, onBack, bgmRef }) => {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 

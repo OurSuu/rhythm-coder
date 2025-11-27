@@ -27,19 +27,18 @@ export class AudioController {
     // ดึงค่าความดังของเสียงในขณะนั้น
     getAnalysis() {
         // 1. สร้างตัวแปร Local มารับค่า (TypeScript จะยอมรับการเช็คค่าแบบนี้)
-        const analyser = this.analyser;
-        const dataArray = this.dataArray;
+        const analyser: AnalyserNode | null = this.analyser;
+        const dataArray: Uint8Array | null = this.dataArray;
 
         // 2. เช็คที่ตัวแปร Local แทน
         if (!analyser || !dataArray) return { bass: 0, mid: 0, high: 0 };
 
-        // 3. เรียกใช้ได้เลย ไม่ต้องมี as Uint8Array แล้ว
-        analyser.getByteFrequencyData(dataArray);
+        analyser.getByteFrequencyData(dataArray as Uint8Array);
 
         // คำนวณค่าเฉลี่ย
-        const bass = this.average(dataArray.slice(0, 10));
-        const mid = this.average(dataArray.slice(10, 50));
-        const high = this.average(dataArray.slice(50, 100));
+        const bass = this.average(Array.from(dataArray).slice(0, 10));
+        const mid = this.average(Array.from(dataArray).slice(10, 50));
+        const high = this.average(Array.from(dataArray).slice(50, 100));
 
         return { bass, mid, high };
     }

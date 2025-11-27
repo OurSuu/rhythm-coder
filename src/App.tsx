@@ -8,9 +8,9 @@ import { TransitionLayer } from './components/TransitionLayer'; // Import ตั
 
 // Mock Data
 const SONG_LIST: Song[] = [
-  { id: 1, title: 'CYBER PUNCH', artist: 'SYSTEM_01', bpm: 128, src: '/song/FirstMusic.mp3', difficulty: 'EASY' },
-  { id: 2, title: 'NEON DRIFT', artist: 'GLITCH_GOD', bpm: 150, src: '/song/SecondMusic.mp3', difficulty: 'HARD' },
-  { id: 3, title: 'VOID WALKER', artist: 'NULL_POINTER', bpm: 175, src: '/music.mp3', difficulty: 'HARD' },
+  { id: 1, title: 'I Hate Me', artist: 'Lily.μ', bpm: 128, src: '/song/FirstMusic.mp3', difficulty: 'EASY' },
+  { id: 2, title: 'Miuri', artist: 'Roce', bpm: 150, src: '/song/SecondMusic.mp3', difficulty: 'HARD' },
+  { id: 3, title: 'NOTHING', artist: 'NULL_POINTER', bpm: 175, src: '/song/music.mp3', difficulty: 'HARD' },
 ];
 
 const BGM_PLAYLIST = [
