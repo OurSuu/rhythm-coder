@@ -46,7 +46,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration] = useState(0); // Remove setDuration, leaving duration only to fix unused variable error
   const [volume] = useState(0.5);
 
   // --- REFS ---
