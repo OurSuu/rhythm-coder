@@ -12,11 +12,11 @@ interface Note {
   lane: 0 | 1 | 2 | 3;
   y: number;
   type: NoteType;
-  length: number;
-  requiredHits: number;
-  currentHits: number;
-  isHolding: boolean;
-  hit: boolean;
+  length: number;       
+  requiredHits: number; 
+  currentHits: number;  
+  isHolding: boolean;   
+  hit: boolean;         
   missed: boolean;
 }
 
@@ -39,6 +39,14 @@ const MAX_HP = 100;
 const HP_PENALTY_MISS = 10; 
 const HP_RECOVER_PERFECT = 2; 
 
+// Function นี้ต้องถูกเรียกใช้ใน JSX
+function formatTime(sec: number) {
+  if (isNaN(sec)) return "00:00";
+  const min = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${min.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
 export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   // State
   const [score, setScore] = useState(0);
@@ -47,23 +55,25 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [audioIntensity, setAudioIntensity] = useState(0);
   const [gameState, setGameState] = useState<'IDLE' | 'COUNTDOWN' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'RESULTS'>('IDLE');
   const [countdown, setCountdown] = useState(3);
-  const [, setLastJudgement] = useState<Judgement | null>(null); // intentionally ignore value
+  const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
-  const [, setCurrentTime] = useState(0); // intentionally ignore value
-  const [, setDuration] = useState(0); // intentionally ignore value
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   // Refs
   const isPlayingRef = useRef(false);
-  const notesRef = useRef<Note[]>([]);
-  const heldLanesRef = useRef<boolean[]>([false, false, false, false]);
+  const notesRef = useRef<Note[]>([]); 
+  const heldLanesRef = useRef<boolean[]>([false, false, false, false]); 
   const audioRef = useRef<HTMLAudioElement>(null);
   const controllerRef = useRef<AudioController>(new AudioController());
-
+  
   const lastBeatTimeRef = useRef<number>(0);
-  const currentSpeedRef = useRef(0.2);
+  const currentSpeedRef = useRef(0.2); 
   const lastFrameTimeRef = useRef<number>(0);
 
-  const WINDOW_GOOD = 15; // Hit window
+  // Constant นี้ต้องถูกใช้
+  const START_SPEED = 0.2; 
+  const WINDOW_GOOD = 15; 
 
   // --- AUDIO SFX ---
   const playSfx = (type: 'HIT' | 'MISS' | 'HOLD') => {
@@ -98,7 +108,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     lastFrameTimeRef.current = now;
     const dtFactor = Math.min(deltaTime, 100) / 16.667; 
 
-    // Audio Sync
     if (audioRef.current) {
         setCurrentTime(audioRef.current.currentTime);
         if (audioRef.current.ended && notesRef.current.length === 0) {
@@ -111,12 +120,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     const analysis = controllerRef.current.getAnalysis();
     setAudioIntensity(analysis.bass); 
 
-    // Dynamic Speed
     const baseSpeed = song.difficulty === 'HARD' ? 0.4 : 0.3;
     const targetSpeed = baseSpeed + (analysis.bass / 255);
     currentSpeedRef.current += (targetSpeed - currentSpeedRef.current) * 0.05 * dtFactor;
 
-    // --- SPAWN LOGIC ---
+    // Spawn Logic
     const timeNow = Date.now();
     if (timeNow - lastBeatTimeRef.current > (60000 / song.bpm / (analysis.bass > 200 ? 2 : 1)) || timeNow - lastBeatTimeRef.current > 1200) {
         const spawnThreshold = song.difficulty === 'HARD' ? 140 : 160;
@@ -131,10 +139,10 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
             if (rand > 0.85) {
                 type = 'HOLD';
-                length = 30 + Math.random() * 50;
+                length = 30 + Math.random() * 50; 
             } else if (rand > 0.75 && song.difficulty === 'HARD') {
                 type = 'RAPID';
-                requiredHits = 5;
+                requiredHits = 5; 
             }
 
             notesRef.current.push({
@@ -146,7 +154,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         }
     }
 
-    // --- MOVE & PROCESS NOTES ---
+    // Move Notes
     notesRef.current = notesRef.current.map(note => {
         let nextY = note.y;
 
@@ -161,13 +169,13 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
             if (note.isHolding) {
                 if (heldLanesRef.current[note.lane]) {
                     setScore(s => s + 10);
-                    playSfx('HOLD');
+                    playSfx('HOLD'); 
                     
                     note.length -= (currentSpeedRef.current * dtFactor);
-                    nextY = HIT_ZONE_Y;
+                    nextY = HIT_ZONE_Y; 
 
                     if (note.length <= 0) {
-                        note.hit = true;
+                        note.hit = true; 
                         triggerHitEffect(note.lane, 'PERFECT');
                         showJudgement('PERFECT');
                     }
@@ -193,12 +201,12 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         }
 
         return { ...note, y: nextY };
-    }).filter(note => note.y < 120 && !note.hit && !note.missed);
+    }).filter(note => note.y < 120 && !note.hit && !note.missed); 
 
     requestAnimationFrame(gameLoop);
   };
 
-  // --- INPUT HANDLER (Unified) ---
+  // --- INPUT HANDLER ---
   const handleInputStart = (lane: number) => {
       if (lane < 0 || lane > 3) return;
       
@@ -232,7 +240,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
               }
           }
           else if (hitNote.type === 'HOLD') {
-              hitNote.isHolding = true;
+              hitNote.isHolding = true; 
               playSfx('HIT');
           }
       }
@@ -240,7 +248,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
 
   const handleInputEnd = (lane: number) => {
       if (lane < 0 || lane > 3) return;
-      heldLanesRef.current[lane] = false;
+      heldLanesRef.current[lane] = false; 
 
       const laneEl = document.getElementById(`lane-${lane}`);
       laneEl?.classList.remove('bg-white/20');
@@ -268,6 +276,10 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   // --- CONTROLS ---
   const startNewGame = () => {
     notesRef.current = []; setScore(0); setCombo(0); setHealth(MAX_HP);
+    
+    // ใช้ START_SPEED ตรงนี้ (แก้ Error TS6133)
+    currentSpeedRef.current = START_SPEED;
+
     if(audioRef.current) { controllerRef.current.setup(audioRef.current); audioRef.current.currentTime = 0; }
     setGameState('COUNTDOWN');
     let c = 3; setCountdown(3);
@@ -283,36 +295,50 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#1a1a2e] via-black to-black"></div>
 
       {/* --- HUD --- */}
-      <div className="z-50 w-full p-4 absolute top-0 flex justify-between items-center text-white pointer-events-none">
-          <div className="text-left">
-              <h1 className="font-bold tracking-widest">{song.title}</h1>
-              <div className="w-48 h-3 bg-gray-900 border border-white/50 skew-x-[-10deg] mt-2 relative overflow-hidden">
-                  <div className={`h-full transition-all duration-100 ${health > 30 ? 'bg-neon-green' : 'bg-red-500'}`} style={{ width: `${health}%` }}></div>
+      <div className="z-50 w-full p-4 absolute top-0 pointer-events-none">
+          <div className="flex justify-between items-center text-white">
+              <div className="text-left">
+                  <h1 className="font-bold tracking-widest">{song.title}</h1>
+                  
+                  {/* TIME & PROGRESS BAR (แก้ Error TS6133: formatTime, currentTime, duration) */}
+                  <div className="flex items-center gap-2 text-xs mt-1">
+                      <span className="text-neon-blue">{formatTime(currentTime)}</span>
+                      <div className="w-32 h-1 bg-gray-800">
+                          <div className="h-full bg-neon-blue" style={{ width: `${(currentTime / duration) * 100 || 0}%` }}></div>
+                      </div>
+                      <span className="text-gray-500">{formatTime(duration)}</span>
+                  </div>
+
+                  <div className="w-48 h-3 bg-gray-900 border border-white/50 skew-x-[-10deg] mt-2 relative overflow-hidden">
+                      <div className={`h-full transition-all duration-100 ${health > 30 ? 'bg-neon-green' : 'bg-red-500'}`} style={{ width: `${health}%` }}></div>
+                  </div>
+              </div>
+              <div className="text-right">
+                  <div className="text-5xl font-black italic">{score.toLocaleString()}</div>
+                  <div className="text-2xl text-neon-blue">{combo} COMBO</div>
               </div>
           </div>
-          <div className="text-right">
-              <div className="text-5xl font-black italic">{score.toLocaleString()}</div>
-              <div className="text-2xl text-neon-blue">{combo} COMBO</div>
-          </div>
+      </div>
+
+      {/* --- CHARACTER --- */}
+      <div className="absolute top-[15%] left-1/2 -translate-x-1/2 z-10 pointer-events-none transform scale-90">
+        <CyberCharacter intensity={audioIntensity} />
       </div>
 
       {/* --- 3D STAGE --- */}
       <div className="relative w-full h-full flex justify-center items-end pb-0 perspective-[400px] overflow-hidden">
         <div className="relative w-full max-w-2xl h-[130%] transform-style-3d rotate-x-[55deg] origin-bottom flex justify-center">
             
-            {/* Floor & Grid */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a1a] to-black border-x-2 border-neon-blue/30">
                 <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(0,243,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,243,255,0.1)_1px,transparent_1px)] bg-[length:100px_100px] animate-grid-scroll"></div>
             </div>
 
-            {/* Hit Line */}
             <div className="absolute w-full h-4 bg-white/20 z-10 shadow-[0_0_20px_white]" style={{ top: `${HIT_ZONE_Y}%` }}></div>
 
             {/* Lanes */}
             {LANES.map((key, i) => (
                 <div key={i} id={`lane-${i}`} className="relative w-1/4 h-full border-r border-white/10 last:border-r-0 flex flex-col justify-end items-center pb-10">
                     <div className="text-4xl font-black text-white/20 transform rotate-x-[-55deg] mb-4">{key}</div>
-                    {/* Hit Effect */}
                     <div className="absolute bottom-0 w-full h-full flex justify-center pointer-events-none">
                         {hitEffects.map(ef => ef.lane === i && (
                             <div key={ef.id} className="absolute bottom-[5%] w-full h-[150%] bg-gradient-to-t from-neon-blue/50 to-transparent animate-pulse"></div>
@@ -320,6 +346,15 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                     </div>
                 </div>
             ))}
+
+            {/* JUDGEMENT OVERLAY (แก้ Error TS6133: lastJudgement) */}
+            {lastJudgement && (
+                <div key={lastJudgement.id} className="absolute top-[40%] left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                    <div className={`text-6xl font-black italic transform -skew-x-12 animate-bounce ${lastJudgement.color} drop-shadow-[0_0_30px_currentColor] tracking-tighter`}>
+                        {lastJudgement.text}
+                    </div>
+                </div>
+            )}
 
             {/* NOTES RENDERER */}
             {notesRef.current.map((note) => {
@@ -342,9 +377,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                                  left: `${note.lane * 25 + 2.5}%`,
                                  boxShadow: `0 0 15px ${note.lane % 2 === 0 ? '#ff00ff' : '#00f3ff'}`
                              }}>
-                            {/* Head */}
                             <div className={`absolute bottom-0 w-full h-12 ${LANE_COLORS[note.lane]} rounded-b-sm`}></div>
-                            {/* Tail */}
                             <div className="absolute top-0 w-full h-2 bg-white"></div>
                         </div>
                     );
@@ -384,12 +417,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
           ))}
       </div>
 
-      {/* --- CHARACTER --- */}
-      <div className="absolute top-[15%] left-1/2 -translate-x-1/2 z-10 pointer-events-none transform scale-90">
-        <CyberCharacter intensity={audioIntensity} />
-      </div>
-
-      {/* Overlays (Start, Game Over, etc.) */}
+      {/* Overlays */}
       {gameState === 'IDLE' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center bg-black/80">
           <button onClick={startNewGame} className="px-16 py-4 border-2 border-neon-blue text-neon-blue font-black text-2xl hover:bg-neon-blue hover:text-black">START MISSION</button>
@@ -414,7 +442,13 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
         </div>
       )}
 
-      <audio ref={audioRef} src={song.src} crossOrigin="anonymous" />
+      {/* ใช้ setDuration ที่ onLoadedMetadata (แก้ Error TS6133: setDuration) */}
+      <audio 
+        ref={audioRef} 
+        src={song.src} 
+        crossOrigin="anonymous" 
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+      />
     </div>
   );
 };
