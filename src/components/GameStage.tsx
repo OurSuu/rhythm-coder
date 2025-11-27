@@ -46,7 +46,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  // REMOVE: const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [volume] = useState(0.5);
 
   // --- REFS ---
@@ -60,9 +60,8 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const notesRef = useRef<Note[]>([]); 
   const lastBeatTimeRef = useRef<number>(0);
   const currentSpeedRef = useRef(0.2);
-  // REMOVE: const targetSpeedRef = useRef(0); 
   
-  // *** NEW: เพิ่ม Ref เก็บเวลาเฟรมล่าสุด เพื่อคำนวณ Delta Time ***
+  // Ref สำหรับ Delta Time
   const lastFrameTimeRef = useRef<number>(0);
 
   const START_SPEED = 0.2; 
@@ -102,16 +101,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const gameLoop = () => {
     if (!isPlayingRef.current) return;
 
-    // --- DELTA TIME CALCULATION (หัวใจสำคัญแก้ปัญหา Lag) ---
-    const now = performance.now(); // ใช้ performance.now() แม่นกว่า Date.now()
+    // Delta Time Calc
+    const now = performance.now();
     const deltaTime = now - lastFrameTimeRef.current;
     lastFrameTimeRef.current = now;
-
-    // ป้องกันกรณี Delta Time เยอะผิดปกติ (เช่น สลับแท็บไปมา) ให้ Lock ไว้ที่ max 100ms
-    // เพื่อไม่ให้โน้ตวาร์ปข้ามจักรวาล
-    const dtFactor = Math.min(deltaTime, 100) / 16.667; // Normalize กับ 60FPS (16.667ms)
-    
-    // ----------------------------------------------------
+    const dtFactor = Math.min(deltaTime, 100) / 16.667; 
 
     if (audioRef.current) {
         setCurrentTime(audioRef.current.currentTime);
@@ -121,36 +115,47 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     const analysis = controllerRef.current.getAnalysis();
     setAudioIntensity(analysis.bass); 
 
-    // Dynamic Speed Logic
-    const baseSpeed = song.difficulty === 'HARD' ? 0.5 : 0.3; // เพิ่ม Base Speed ขึ้นนิดนึงเพราะใช้ dtFactor แล้ว
-    const speedMultiplier = song.difficulty === 'HARD' ? 1.0 : 0.7;
+    // === 1. DYNAMIC SPEED (ปรับใหม่ให้ช้าลงตอนเพลงเบา) ===
+    const baseSpeed = song.difficulty === 'HARD' ? 0.3 : 0.2; 
+    const speedMultiplier = song.difficulty === 'HARD' ? 1.2 : 0.8;
     const bassRatio = analysis.bass / 255;
     const targetSpeed = baseSpeed + (bassRatio * speedMultiplier);
-
-    // Lerp Speed
+    
     currentSpeedRef.current += (targetSpeed - currentSpeedRef.current) * 0.05 * dtFactor;
 
-    // Spawn Logic
-    const timeSinceLastNote = Date.now() - lastBeatTimeRef.current;
+    // === 2. NOTE SPAWN LOGIC (แก้ตรงนี้: ลดความถี่ลง) ===
+    const timeNow = Date.now();
+    const timeSinceLastNote = timeNow - lastBeatTimeRef.current;
+    
     const MAX_SILENCE_DURATION = song.difficulty === 'HARD' ? 800 : 1200; 
     const spawnThreshold = song.difficulty === 'HARD' ? 140 : 160;
 
-    const shouldSpawn = (analysis.bass > spawnThreshold && timeSinceLastNote > (60000 / song.bpm / 2)) || timeSinceLastNote > MAX_SILENCE_DURATION;
+    // *** สูตรลดความถี่ (Density Control) ***
+    // Default: 1/4 Note (Beat ปกติ) -> โน้ตจะไม่มารัวๆ
+    let noteDivisor = 1; 
+    
+    // ถ้า Hard + Bass หนักมากจริงๆ ถึงจะยอมให้มาถี่ (1/8 Note)
+    if (song.difficulty === 'HARD' && analysis.bass > 230) {
+        noteDivisor = 2; 
+    }
+
+    // คำนวณระยะห่างขั้นต่ำ
+    const minNoteGap = (60000 / song.bpm) / noteDivisor;
+
+    const shouldSpawn = (analysis.bass > spawnThreshold && timeSinceLastNote > minNoteGap) || timeSinceLastNote > MAX_SILENCE_DURATION;
 
     if (shouldSpawn) {
       const randomLane = Math.floor(Math.random() * 4) as 0 | 1 | 2 | 3;
-      if (analysis.bass > spawnThreshold || Math.random() > 0.2) {
-          notesRef.current.push({ id: Date.now() + Math.random(), lane: randomLane, y: -10, hit: false, missed: false });
-          lastBeatTimeRef.current = Date.now();
+      // เพิ่มเงื่อนไขสุ่มอีกนิดเพื่อความธรรมชาติ (ไม่ให้มาทุกเม็ดเป๊ะๆ เกินไป)
+      if (analysis.bass > spawnThreshold || Math.random() > 0.3) {
+          notesRef.current.push({ id: timeNow + Math.random(), lane: randomLane, y: -10, hit: false, missed: false });
+          lastBeatTimeRef.current = timeNow;
       }
     }
 
-    // Move Notes (คูณ dtFactor เข้าไป)
+    // Move Notes
     notesRef.current = notesRef.current.map(note => {
-        // สูตรใหม่: speed * DeltaTime Factor
-        // ถ้าเครื่องช้า (dtFactor > 1) โน้ตจะขยับเยอะขึ้นเพื่อชดเชย
         const nextY = note.y + (currentSpeedRef.current * dtFactor);
-        
         if (nextY > HIT_ZONE_Y + WINDOW_BAD && !note.hit && !note.missed) {
             note.missed = true; 
             setCombo(0); comboRef.current = 0;
@@ -193,7 +198,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     if (!audioRef.current) return;
     setGameState('PLAYING'); isPlayingRef.current = true; 
     
-    // Reset Last Frame Time เพื่อไม่ให้ dt พุ่งสูงตอนเริ่มเกม
+    // Reset Delta Time
     lastFrameTimeRef.current = performance.now();
     lastBeatTimeRef.current = Date.now();
 
@@ -275,7 +280,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState]);
 
-  // Remove duration from formatTime rendering
   return (
     <div className="relative w-full h-screen bg-dark-bg overflow-hidden font-mono select-none outline-none" tabIndex={0}>
       
@@ -300,6 +304,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 </div>
                 <div className="flex justify-between w-full text-[10px] text-gray-500">
                     <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
                 </div>
             </div>
             <div className="text-right w-full md:w-auto pointer-events-auto">
@@ -341,6 +346,8 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 {LANES.map((key, index) => (
                     <div key={index} id={`lane-${index}`} className="relative w-1/4 h-full border-r border-neon-blue/5 last:border-r-0 flex flex-col justify-end items-center pb-10 transition-colors duration-75">
                         <div className="text-4xl font-black text-white/20 transform rotate-x-[-55deg] mb-4">{key}</div>
+                        
+                        {/* Hit VFX Container */}
                         <div className="absolute bottom-0 w-full h-full flex justify-center pointer-events-none overflow-hidden">
                              {hitEffects.map(effect => effect.lane === index && (
                                  <div key={effect.id} className="absolute bottom-[5%] w-full flex justify-center items-end">
@@ -398,6 +405,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
           <button onClick={startNewGame} className="px-16 py-4 border-2 border-neon-blue text-neon-blue font-black text-2xl hover:bg-neon-blue hover:text-black transition-all">INITIALIZE</button>
         </div>
       )}
+      
       {gameState === 'PAUSED' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center bg-black/60">
            <div className="bg-black border border-neon-blue p-10 text-center shadow-[0_0_50px_rgba(0,243,255,0.2)]">
@@ -409,6 +417,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
            </div>
         </div>
       )}
+
       {gameState === 'GAMEOVER' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center bg-black/90 crt-overlay">
            <div className="text-center">
@@ -421,6 +430,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
            </div>
         </div>
       )}
+
       {gameState === 'COUNTDOWN' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center">
            <div key={countdown} className="text-[150px] font-black text-white animate-countdown drop-shadow-[0_0_50px_#00f3ff]">{countdown}</div>
