@@ -46,7 +46,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const [lastJudgement, setLastJudgement] = useState<Judgement | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, /* setDuration */] = useState(0); // remove setDuration as per TS6133
+  const [duration, setDuration] = useState(0);
   const [volume] = useState(0.5);
 
   // --- REFS ---
@@ -59,10 +59,13 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const controllerRef = useRef<AudioController>(new AudioController());
   const notesRef = useRef<Note[]>([]); 
   const lastBeatTimeRef = useRef<number>(0);
-  const currentSpeedRef = useRef(0.2); // *** เริ่มต้นช้าๆ เลย ***
-  // const targetSpeedRef = useRef(0);  // Removed as per TS6133, never used
+  const currentSpeedRef = useRef(0.2);
+  const targetSpeedRef = useRef(0); 
+  
+  // *** NEW: เพิ่ม Ref เก็บเวลาเฟรมล่าสุด เพื่อคำนวณ Delta Time ***
+  const lastFrameTimeRef = useRef<number>(0);
 
-  const START_SPEED = 0.2; // *** ปรับ Start Speed ให้ต่ำลง ***
+  const START_SPEED = 0.2; 
   const WINDOW_PERFECT = 5; const WINDOW_GOOD = 12; const WINDOW_BAD = 18;
 
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
@@ -99,6 +102,17 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const gameLoop = () => {
     if (!isPlayingRef.current) return;
 
+    // --- DELTA TIME CALCULATION (หัวใจสำคัญแก้ปัญหา Lag) ---
+    const now = performance.now(); // ใช้ performance.now() แม่นกว่า Date.now()
+    const deltaTime = now - lastFrameTimeRef.current;
+    lastFrameTimeRef.current = now;
+
+    // ป้องกันกรณี Delta Time เยอะผิดปกติ (เช่น สลับแท็บไปมา) ให้ Lock ไว้ที่ max 100ms
+    // เพื่อไม่ให้โน้ตวาร์ปข้ามจักรวาล
+    const dtFactor = Math.min(deltaTime, 100) / 16.667; // Normalize กับ 60FPS (16.667ms)
+    
+    // ----------------------------------------------------
+
     if (audioRef.current) {
         setCurrentTime(audioRef.current.currentTime);
         if (audioRef.current.ended) { isPlayingRef.current = false; return; }
@@ -107,25 +121,17 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     const analysis = controllerRef.current.getAnalysis();
     setAudioIntensity(analysis.bass); 
 
-    // === 1. DYNAMIC SPEED SYSTEM (TUNED) ===
-    // สูตรใหม่: ลด Base Speed ลงเพื่อให้ช่วงเบาช้าจริงๆ แล้วเพิ่ม Multiplier ให้ช่วงพีคยังเร็วอยู่
-    
-    // Hard: Min 0.3 -> Max 1.5
-    // Easy: Min 0.2 -> Max 1.0
-    const baseSpeed = song.difficulty === 'HARD' ? 0.3 : 0.2; 
-    const speedMultiplier = song.difficulty === 'HARD' ? 1.2 : 0.8;
-    
-    const bassRatio = analysis.bass / 255; // 0.0 - 1.0
+    // Dynamic Speed Logic
+    const baseSpeed = song.difficulty === 'HARD' ? 0.5 : 0.3; // เพิ่ม Base Speed ขึ้นนิดนึงเพราะใช้ dtFactor แล้ว
+    const speedMultiplier = song.difficulty === 'HARD' ? 1.0 : 0.7;
+    const bassRatio = analysis.bass / 255;
     const targetSpeed = baseSpeed + (bassRatio * speedMultiplier);
 
-    // Lerp (ค่อยๆ เปลี่ยนความเร็ว ไม่กระชาก)
-    currentSpeedRef.current += (targetSpeed - currentSpeedRef.current) * 0.05;
+    // Lerp Speed
+    currentSpeedRef.current += (targetSpeed - currentSpeedRef.current) * 0.05 * dtFactor;
 
-    // === 2. NOTE SPAWNING ===
-    const now = Date.now();
-    const timeSinceLastNote = now - lastBeatTimeRef.current;
-    
-    // Config การเกิดโน้ต
+    // Spawn Logic
+    const timeSinceLastNote = Date.now() - lastBeatTimeRef.current;
     const MAX_SILENCE_DURATION = song.difficulty === 'HARD' ? 800 : 1200; 
     const spawnThreshold = song.difficulty === 'HARD' ? 140 : 160;
 
@@ -134,14 +140,17 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     if (shouldSpawn) {
       const randomLane = Math.floor(Math.random() * 4) as 0 | 1 | 2 | 3;
       if (analysis.bass > spawnThreshold || Math.random() > 0.2) {
-          notesRef.current.push({ id: now + Math.random(), lane: randomLane, y: 0, hit: false, missed: false });
-          lastBeatTimeRef.current = now;
+          notesRef.current.push({ id: Date.now() + Math.random(), lane: randomLane, y: -10, hit: false, missed: false });
+          lastBeatTimeRef.current = Date.now();
       }
     }
 
-    // === 3. MOVE NOTES ===
+    // Move Notes (คูณ dtFactor เข้าไป)
     notesRef.current = notesRef.current.map(note => {
-        const nextY = note.y + currentSpeedRef.current;
+        // สูตรใหม่: speed * DeltaTime Factor
+        // ถ้าเครื่องช้า (dtFactor > 1) โน้ตจะขยับเยอะขึ้นเพื่อชดเชย
+        const nextY = note.y + (currentSpeedRef.current * dtFactor);
+        
         if (nextY > HIT_ZONE_Y + WINDOW_BAD && !note.hit && !note.missed) {
             note.missed = true; 
             setCombo(0); comboRef.current = 0;
@@ -160,7 +169,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
     notesRef.current = []; setScore(0); setCombo(0); comboRef.current = 0;
     setHealth(MAX_HP); healthRef.current = MAX_HP;
     
-    // Reset Speed
     currentSpeedRef.current = START_SPEED;
     
     if (audioRef.current) {
@@ -184,6 +192,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
   const enterGameplay = async () => {
     if (!audioRef.current) return;
     setGameState('PLAYING'); isPlayingRef.current = true; 
+    
+    // Reset Last Frame Time เพื่อไม่ให้ dt พุ่งสูงตอนเริ่มเกม
+    lastFrameTimeRef.current = performance.now();
+    lastBeatTimeRef.current = Date.now();
+
     try {
       controllerRef.current.resume();
       await audioRef.current.play();
@@ -273,7 +286,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
       {/* --- HUD --- */}
       <div className={`z-50 w-full p-4 absolute top-0 pointer-events-none transition-all duration-300 ${gameState === 'PAUSED' ? 'opacity-20 blur-sm' : 'opacity-100'}`}>
         <div className="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto gap-4">
-            {/* Top Left */}
             <div className="pointer-events-auto flex items-center gap-4 w-full md:w-auto">
                 <button onClick={togglePause} className="w-10 h-10 flex items-center justify-center border border-neon-blue/50 bg-black/50 backdrop-blur rounded-full text-neon-blue hover:bg-neon-blue hover:text-black transition-all">||</button>
                 <div>
@@ -281,8 +293,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                     <p className="text-neon-blue text-[10px] tracking-[0.2em]">{song.artist}</p>
                 </div>
             </div>
-
-            {/* Top Center */}
             <div className="flex-1 w-full md:px-20 flex flex-col items-center gap-1">
                 <div className="w-full h-3 bg-gray-900 border border-white/20 relative overflow-hidden skew-x-[-10deg]">
                     <div className={`h-full transition-all duration-200 ease-out ${health > 30 ? 'bg-neon-green shadow-[0_0_10px_#00ff9f]' : 'bg-red-600 animate-pulse'}`} style={{ width: `${health}%` }}></div>
@@ -292,8 +302,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                     <span>{formatTime(duration)}</span>
                 </div>
             </div>
-
-            {/* Top Right */}
             <div className="text-right w-full md:w-auto pointer-events-auto">
                 <div className="text-4xl md:text-5xl font-black italic text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">{score.toLocaleString()}</div>
                 <div className={`text-xl font-black italic ${combo > 10 ? 'text-neon-pink animate-pulse' : 'text-gray-600'}`}>COMBO {combo}</div>
@@ -333,16 +341,11 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 {LANES.map((key, index) => (
                     <div key={index} id={`lane-${index}`} className="relative w-1/4 h-full border-r border-neon-blue/5 last:border-r-0 flex flex-col justify-end items-center pb-10 transition-colors duration-75">
                         <div className="text-4xl font-black text-white/20 transform rotate-x-[-55deg] mb-4">{key}</div>
-                        
-                        {/* Hit VFX Container */}
                         <div className="absolute bottom-0 w-full h-full flex justify-center pointer-events-none overflow-hidden">
                              {hitEffects.map(effect => effect.lane === index && (
                                  <div key={effect.id} className="absolute bottom-[5%] w-full flex justify-center items-end">
-                                     {/* 1. Shockwave Ring */}
                                      <div className={`absolute w-32 h-32 border-4 rounded-full animate-ping opacity-0 ${effect.type === 'PERFECT' ? 'border-yellow-400' : 'border-neon-blue'}`} style={{ animationDuration: '0.6s' }}></div>
-                                     {/* 2. Core Flash */}
                                      <div className={`absolute w-full h-32 bg-gradient-to-t from-white to-transparent opacity-80 animate-pulse blur-md`}></div>
-                                     {/* 3. Sparks */}
                                      <div className="absolute w-2 h-2 bg-white rounded-full animate-ping" style={{ left: '20%', bottom: '20%', animationDuration: '0.3s' }}></div>
                                      <div className="absolute w-2 h-2 bg-white rounded-full animate-ping" style={{ right: '20%', bottom: '30%', animationDuration: '0.4s' }}></div>
                                  </div>
@@ -361,7 +364,7 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
                 </div>
             )}
 
-            {/* NOTES (BLOCK STYLE) */}
+            {/* NOTES */}
             {notesRef.current.map((note) => !note.hit && (
                 <div
                     key={note.id}
@@ -395,7 +398,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
           <button onClick={startNewGame} className="px-16 py-4 border-2 border-neon-blue text-neon-blue font-black text-2xl hover:bg-neon-blue hover:text-black transition-all">INITIALIZE</button>
         </div>
       )}
-      
       {gameState === 'PAUSED' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center bg-black/60">
            <div className="bg-black border border-neon-blue p-10 text-center shadow-[0_0_50px_rgba(0,243,255,0.2)]">
@@ -407,7 +409,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
            </div>
         </div>
       )}
-
       {gameState === 'GAMEOVER' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center bg-black/90 crt-overlay">
            <div className="text-center">
@@ -420,7 +421,6 @@ export const GameStage: React.FC<GameProps> = ({ song, onBack }) => {
            </div>
         </div>
       )}
-
       {gameState === 'COUNTDOWN' && (
         <div className="absolute inset-0 z-50 flex justify-center items-center">
            <div key={countdown} className="text-[150px] font-black text-white animate-countdown drop-shadow-[0_0_50px_#00f3ff]">{countdown}</div>
